@@ -68,10 +68,11 @@ try
                     var downloads = item.GetProperty("download_count").GetUInt64();
 
                     var identifier = $"{entry.Key}-{item.GetProperty("name").GetString()}";
+                    var name = item.GetProperty("name").GetString().Replace("_", " ") ?? "null";
 
                     var mod = new Mod
                     {
-                        name = item.GetProperty("name").GetString().Replace("_", " ") ?? "null",
+                        name = name,
                         Downloads = downloads,
                         Ratings = ratings,
                         Version = extractedVersion,
@@ -85,7 +86,10 @@ try
                     totalDownloads += downloads;
                     totalRatings += ratings;
 
-                    Console.WriteLine($"[Thunderstore]: Processed {identifier} || Downloads: {mod.Downloads} || Ratings: {mod.Ratings} || Popular: {mod.popular}");
+                    string _name = name.PadRight(20);
+                    string _downloads = mod.Downloads.ToString().PadRight(8);
+
+                    Console.WriteLine($"[Thunderstore]: Processed {_name} || Downloads: {_downloads} || Ratings: {mod.Ratings}");
 
                     packageData[item.GetProperty("name").GetString()] = mod;
                 }
@@ -153,6 +157,9 @@ try
             Console.WriteLine($"[Nexus] {entry.Key} || Downloads: {entry.Value.Downloads} || Endorsements: {entry.Value.Ratings}");
         }
     }
+
+    Console.WriteLine($"Total Downloads: {totalDownloads}");
+    Console.WriteLine($"Total Ratings: {totalRatings}");
 
     var finalData = new Dictionary<string, object>
     {
