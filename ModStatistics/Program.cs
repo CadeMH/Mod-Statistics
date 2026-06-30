@@ -14,8 +14,8 @@ using HttpClient client = new HttpClient();
 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Compatible; ModStats/1.0)");
 
 bool getThunderstore = true;
-bool getSteam = true;
-bool getNexus = true;
+bool getSteam = false;
+bool getNexus = false;
 
 Console.WriteLine("/// --- /// MOD STATISTICS /// --- ///");
 
@@ -50,12 +50,18 @@ try
     {
         foreach (var entry in thunderstoreTeams)
         {
-            var baseURL = "https://thunderstore.io/api/cyberstorm/listing";
+            var baseURL = "https://thunderstore.io/api/cyberstorm";
             foreach (var community in entry.Value.communities)
             {
-                var url = $"{baseURL}/{community}/{entry.Key}";
-                var response = await client.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(response);
+                var url = $"{baseURL}/listing/{community}/{entry.Key}";
+                //var response = await client.GetStringAsync(url);
+                //using var doc = JsonDocument.Parse(response);
+
+                using var response = await client.GetStreamAsync($"{baseURL}/community/{community}");
+                using var document = await JsonDocument.ParseAsync(response);
+
+                string communityName = document.RootElement.GetProperty("name").GetString();
+
 
                 await foreach(var item in GetAllPages(url))
                 {
@@ -76,6 +82,7 @@ try
                         Ratings = ratings,
                         Version = extractedVersion,
                         community = community,
+                        community_name = communityName,
                         link = $"https://thunderstore.io/c/{community}/p/{entry.Key}/{item.GetProperty("name").GetString() ?? "null"}",
                         platform = "Thunderstore",
                         popular = entry.Value.popular_identifiers.Contains(identifier) ? "True" : "False",
@@ -173,7 +180,7 @@ try
 
         var gistFiles = new Dictionary<string, object>
         {
-            { "prev.json", new { content = JsonSerializer.Serialize(finalData, new JsonSerializerOptions { WriteIndented = true }) } }
+            { "mods.json", new { content = JsonSerializer.Serialize(finalData, new JsonSerializerOptions { WriteIndented = true }) } }
         };
 
         var gistPayload = new { files = gistFiles };

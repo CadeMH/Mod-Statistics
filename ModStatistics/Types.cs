@@ -12,6 +12,7 @@ namespace ModStatistics
         [JsonPropertyName("version")]
         public string Version { get; set; } = "1.0.0";
         public string community { get; set; } = "null";
+        public string community_name { get; set; } = "null";
         public string link { get; set; } = "null";
         public string platform { get; set; } = "null";
         public string popular { get; set; } = "False";
