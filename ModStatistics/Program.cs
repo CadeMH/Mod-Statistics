@@ -13,6 +13,8 @@ string nexusApiKey = Environment.GetEnvironmentVariable("NEXUS_API_KEY") ?? "";
 using HttpClient client = new HttpClient();
 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Compatible; ModStats/1.0)");
 
+bool getDiscord = true;
+
 bool getThunderstore = true;
 bool getSteam = false;
 bool getNexus = false;
@@ -24,6 +26,7 @@ try
     var thunderstoreTeams = Thunderstore.GetThunderstoreMods();
     var steamMods = SteamWorkshop.GetSteamWorkshop();
     var nexusMods = NexusMods.GetNexusMods();
+    var discordServers = Discord.GetDiscordServers();
 
     var packageData = new Dictionary<string, object>();
 
@@ -162,6 +165,26 @@ try
 
             packageData[$"Nexus - {entry.Key}"] = entry.Value;
             Console.WriteLine($"[Nexus] {entry.Key} || Downloads: {entry.Value.Downloads} || Endorsements: {entry.Value.Ratings}");
+        }
+    }
+
+    if (getDiscord)
+    {
+        foreach (var entry in discordServers)
+        {
+            Console.WriteLine(entry.Value.Name);
+            string url = $"https://discord.com/api/invites/{entry.Value.InviteLink}";
+            var response = await client.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(response);
+            var root = doc.RootElement;
+
+            entry.Value.MemberCount = root.GetProperty("profile").GetProperty("member_count").GetUInt64();
+            entry.Value.OnlineCount = root.GetProperty("profile").GetProperty("online_count").GetUInt64();
+            entry.Value.Description = root.GetProperty("profile").GetProperty("description").GetString() ?? "";
+            string guildID = root.GetProperty("profile").GetProperty("id").GetString() ?? "";
+            string iconHash = root.GetProperty("profile").GetProperty("icon").GetString() ?? "";
+            
+            entry.Value.Icon = $"https://cdn.discordapp.com/icons/{guildID}/{iconHash}.webp?size=256&quality=lossless";
         }
     }
 

@@ -1,0 +1,44 @@
+{
+    "PEAK": {
+        "role": "Administrator",
+        "invite": "peakgame",
+        "archive" : false
+    },
+    "Content Warning": {
+        "role": "Administrator",
+        "invite": "contentwarning",
+        "archive" : false
+    },
+    "Haste" : {
+        "role": "Administrator",
+        "invite": "hastebrokenworlds",
+        "archive" : false
+    },
+    "Aggro Crab": {
+        "description": "This server is for fans of Aggro Crab Games, developer of CRASHOUT CREW, Another Crab's Treasure, Going Under and more!!!",
+        "role": "Administrator",
+        "invite": "aggrocrab",
+        "archive" : false
+    },
+    "Wrong Organ": {
+        "role": "Discord Manager",
+        "invite": "wrong-organ",
+        "archive" : false
+    },
+    "Super Battle Golf Modding": {
+        "role": "Moderator",
+        "invite": "CCcvS2JDjH",
+        "archive" : false
+    },
+    "Mail Time": {
+        "role": "Administrator",
+        "invite": "mailtime",
+        "archive" : true
+    },
+    "Blacklight Interactive": {
+        "description": "Community server for the Blacklight Interactive game studio. Previously the official server for Golf With Your Friends.",
+        "role": "Moderator",
+        "invite": "blacklightinteractive",
+        "archive" : false
+    }
+}
