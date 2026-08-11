@@ -30,6 +30,11 @@
         "invite": "CCcvS2JDjH",
         "archive" : false
     },
+    "LFG Tool": {
+        "role": "Developer",
+        "invite": "ARyWWXDSBW",
+        "archive" : false
+    },
     "Mail Time": {
         "role": "Administrator",
         "invite": "mailtime",
@@ -39,6 +44,21 @@
         "description": "Community server for the Blacklight Interactive game studio. Previously the official server for Golf With Your Friends.",
         "role": "Moderator",
         "invite": "blacklightinteractive",
-        "archive" : false
+        "archive" : true
+    },
+    "Turbo Golf Racing": {
+        "role": "Moderator",
+        "invite": "turbo-golf-racing-893148839765246082",
+        "archive" : true
+    },
+    "Torched Hill": {
+        "role": "Moderator",
+        "invite": "7u48qBBRak",
+        "archive" : true
+    },
+    "Witch Fern": {
+        "role": "Moderator",
+        "invite": "CrD575NJ9r",
+        "archive" : true
     }
 }

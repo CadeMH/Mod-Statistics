@@ -28,11 +28,14 @@ try
     var nexusMods = NexusMods.GetNexusMods();
     var discordServers = Discord.GetDiscordServers();
 
-    var packageData = new Dictionary<string, object>();
+    var modData = new Dictionary<string, object>();
+    var discordData = new Dictionary<string, DiscordServer>();
 
     ulong totalDownloads = 0;
     ulong totalRatings = 0;
     ulong totalRatingsBad = 0;
+
+    ulong totalDiscordMembers = 0;
 
     async IAsyncEnumerable<JsonElement> GetAllPages(string initialUrl)
     {
@@ -101,7 +104,7 @@ try
 
                     Console.WriteLine($"[Thunderstore]: Processed {_name} || Downloads: {_downloads} || Ratings: {mod.Ratings}");
 
-                    packageData[item.GetProperty("name").GetString()] = mod;
+                    modData[item.GetProperty("name").GetString()] = mod;
                 }
             }
         }
@@ -135,7 +138,7 @@ try
                 totalRatings += mod.PositiveRatings;
                 totalRatingsBad += mod.NegativeRatings;
 
-                packageData[$"Steam - {title}"] = mod;
+                modData[$"Steam - {title}"] = mod;
                 Console.WriteLine($"[Steam] {title} || Subs: {mod.Downloads} || +{mod.PositiveRatings} / -{mod.NegativeRatings}");
             }
         }
@@ -163,7 +166,7 @@ try
             totalDownloads += entry.Value.Downloads;
             totalRatings += entry.Value.Ratings;
 
-            packageData[$"Nexus - {entry.Key}"] = entry.Value;
+            modData[$"Nexus - {entry.Key}"] = entry.Value;
             Console.WriteLine($"[Nexus] {entry.Key} || Downloads: {entry.Value.Downloads} || Endorsements: {entry.Value.Ratings}");
         }
     }
@@ -182,16 +185,22 @@ try
             entry.Value.OnlineCount = root.GetProperty("profile").GetProperty("online_count").GetUInt64();
             entry.Value.Description = root.GetProperty("profile").GetProperty("description").GetString() ?? "";
             string guildID = root.GetProperty("profile").GetProperty("id").GetString() ?? "";
-            string iconHash = root.GetProperty("profile").GetProperty("icon").GetString() ?? "";
+            string iconHash = root.GetProperty("profile").GetProperty("icon_hash").GetString() ?? "";
             
             entry.Value.Icon = $"https://cdn.discordapp.com/icons/{guildID}/{iconHash}.webp?size=256&quality=lossless";
+            totalDiscordMembers += entry.Value.MemberCount;
+
+            discordData[$"Discord - {entry.Key}"] = entry.Value;
+
+            Console.WriteLine($"[Discord] {entry.Key} || Members: {entry.Value.MemberCount} || Online: {entry.Value.OnlineCount}");
         }
     }
 
     Console.WriteLine($"Total Downloads: {totalDownloads}");
     Console.WriteLine($"Total Ratings: {totalRatings}");
+    Console.WriteLine($"Total Discord Members: {totalDiscordMembers}");
 
-    var finalData = new Dictionary<string, object>
+    var finalModData = new Dictionary<string, object>
     {
         { "total_downloads", totalDownloads },
         { "total_ratings", totalRatings },
@@ -199,10 +208,21 @@ try
         { "last_checked", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }
     };
 
-    foreach (var pkg in packageData) finalData.Add(pkg.Key, pkg.Value);
+    var finalDiscordData = new Dictionary<string, object>
+    {
+        { "total_discord_members", totalDiscordMembers },
+        { "last_checked", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }
+    };
 
-    var _gistPayload = new { files = new { prev_json = new { content = JsonSerializer.Serialize(finalData, new JsonSerializerOptions { WriteIndented = true }) } } };
-    Console.WriteLine(_gistPayload);
+    foreach (var pkg in modData) finalModData.Add(pkg.Key, pkg.Value);
+
+    foreach (var pkg in discordData) finalDiscordData.Add(pkg.Key, pkg.Value);
+
+    var _gistModPayload = new { files = new { prev_json = new { content = JsonSerializer.Serialize(finalModData, new JsonSerializerOptions { WriteIndented = true }) } } };
+    Console.WriteLine(_gistModPayload);
+
+    var _gistDiscordPayload = new { files = new { prev_json = new { content = JsonSerializer.Serialize(finalDiscordData, new JsonSerializerOptions { WriteIndented = true }) } } };
+    Console.WriteLine(_gistDiscordPayload);
 
     if (!string.IsNullOrEmpty(githubToken))
     {
@@ -210,7 +230,8 @@ try
 
         var gistFiles = new Dictionary<string, object>
         {
-            { "mods.json", new { content = JsonSerializer.Serialize(finalData, new JsonSerializerOptions { WriteIndented = true }) } }
+            { "mods.json", new { content = JsonSerializer.Serialize(finalModData, new JsonSerializerOptions { WriteIndented = true }) } },
+            { "discord.json", new { content = JsonSerializer.Serialize(finalDiscordData, new JsonSerializerOptions { WriteIndented = true }) } }
         };
 
         var gistPayload = new { files = gistFiles };
