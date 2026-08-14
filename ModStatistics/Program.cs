@@ -188,7 +188,9 @@ try
             string iconHash = root.GetProperty("profile").GetProperty("icon_hash").GetString() ?? "";
             
             entry.Value.Icon = $"https://cdn.discordapp.com/icons/{guildID}/{iconHash}.webp?size=256&quality=lossless";
-            totalDiscordMembers += entry.Value.MemberCount;
+
+            if(!entry.Value.Archive)
+                totalDiscordMembers += entry.Value.MemberCount;
 
             discordData[$"Discord - {entry.Key}"] = entry.Value;
 
