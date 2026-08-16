@@ -33,16 +33,23 @@ try
 
     async IAsyncEnumerable<JsonElement> GetAllPages(string initialUrl)
     {
-        string url = initialUrl;
-        while (url != null)
+        string? url = initialUrl;
+        while (!string.IsNullOrEmpty(url))
         {
-            var response = await client.GetStringAsync(url);
+            var response = await GetStringWithRetryAsync(client, url);
             using var doc = JsonDocument.Parse(response);
 
-            foreach (var item in doc.RootElement.GetProperty("results").EnumerateArray())
-                yield return item.Clone();
+            if (doc.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in results.EnumerateArray())
+                {
+                    yield return item.Clone();
+                }
+            }
 
-            url = doc.RootElement.GetProperty("next").GetString();
+            url = doc.RootElement.TryGetProperty("next", out var next) && next.ValueKind == JsonValueKind.String
+                ? next.GetString()
+                : null;
         }
     }
 
@@ -54,10 +61,8 @@ try
             foreach (var community in entry.Value.communities)
             {
                 var url = $"{baseURL}/{community}/{entry.Key}";
-                var response = await client.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(response);
 
-                await foreach(var item in GetAllPages(url))
+                await foreach (var item in GetAllPages(url))
                 {
                     var versionRegex = new Regex(@"(?<=-)([\d\.]+)(?=\.png)");
 
@@ -71,7 +76,7 @@ try
 
                     var mod = new Mod
                     {
-                        name = item.GetProperty("name").GetString().Replace("_", " ") ?? "null",
+                        name = item.GetProperty("name").GetString()?.Replace("_", " ") ?? "null",
                         Downloads = downloads,
                         Ratings = ratings,
                         Version = extractedVersion,
@@ -87,7 +92,7 @@ try
 
                     Console.WriteLine($"[Thunderstore]: Processed {identifier} || Downloads: {mod.Downloads} || Ratings: {mod.Ratings} || Popular: {mod.popular}");
 
-                    packageData[item.GetProperty("name").GetString()] = mod;
+                    packageData[item.GetProperty("name").GetString()!] = mod;
                 }
             }
         }
@@ -98,9 +103,12 @@ try
         var steamIds = steamMods.Keys.ToList();
         var steamUrl = "https://api.steampowered.com/IPublishedFileService/GetDetails/v1/?key=" + steamApiKey + "&includevotes=true";
 
-        for (int i = 0; i < steamIds.Count; i++) steamUrl += $"&publishedfileids[{i}]={steamIds[i]}";
+        for (int i = 0; i < steamIds.Count; i++)
+        {
+            steamUrl += $"&publishedfileids[{i}]={steamIds[i]}";
+        }
 
-        var response = await client.GetStringAsync(steamUrl);
+        var response = await GetStringWithRetryAsync(client, steamUrl);
         using var doc = JsonDocument.Parse(response);
         var items = doc.RootElement.GetProperty("response").GetProperty("publishedfiledetails");
 
@@ -129,15 +137,15 @@ try
 
     if (getNexus && !string.IsNullOrEmpty(nexusApiKey))
     {
-        client.DefaultRequestHeaders.Clear();
+        client.DefaultRequestHeaders.Remove("apikey");
         client.DefaultRequestHeaders.Add("apikey", nexusApiKey);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Compatible; ModStats/1.0)");
 
         foreach (var entry in nexusMods)
         {
-            Console.WriteLine(entry.Value.community, entry.Value.nexusModId);
+            Console.WriteLine($"{entry.Value.community} {entry.Value.nexusModId}");
             string url = $"https://api.nexusmods.com/v1/games/{entry.Value.community}/mods/{entry.Value.nexusModId}.json";
-            var response = await client.GetStringAsync(url);
+
+            var response = await GetStringWithRetryAsync(client, url);
             using var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
 
@@ -162,7 +170,10 @@ try
         { "last_checked", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }
     };
 
-    foreach (var pkg in packageData) finalData.Add(pkg.Key, pkg.Value);
+    foreach (var pkg in packageData)
+    {
+        finalData.Add(pkg.Key, pkg.Value);
+    }
 
     var _gistPayload = new { files = new { prev_json = new { content = JsonSerializer.Serialize(finalData, new JsonSerializerOptions { WriteIndented = true }) } } };
     Console.WriteLine(_gistPayload);
@@ -177,14 +188,56 @@ try
         };
 
         var gistPayload = new { files = gistFiles };
-        var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
+        using var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
 
-        var result = await client.PatchAsync($"https://api.github.com/gists/{gistId}", patchContent);
-        Console.WriteLine(result.IsSuccessStatusCode ? "Success! Gist Updated" : $"Error: Gist Failed: {result.StatusCode}");
+        var response = await SendWithRetryAsync(() => client.PatchAsync($"https://api.github.com/gists/{gistId}", patchContent));
+        Console.WriteLine(response.IsSuccessStatusCode ? "Success! Gist Updated" : $"Error: Gist Failed: {response.StatusCode}");
     }
 }
 catch (Exception ex)
 {
     Console.WriteLine($"Error: {ex.Message}");
     Environment.Exit(1);
+}
+
+static async Task<HttpResponseMessage> SendWithRetryAsync(
+    Func<Task<HttpResponseMessage>> requestFunc,
+    int maxRetries = 3,
+    int initialDelayMs = 1000)
+{
+    int delay = initialDelayMs;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++)
+    {
+        try
+        {
+            var response = await requestFunc();
+
+            int statusCode = (int)response.StatusCode;
+            bool isTransient = statusCode >= 500 || statusCode == 429;
+
+            if (response.IsSuccessStatusCode || !isTransient || attempt == maxRetries)
+            {
+                return response;
+            }
+
+            Console.WriteLine($"[Retry Warning] Status code {statusCode}. Retrying attempt {attempt}/{maxRetries} in {delay}ms...");
+        }
+        catch (Exception ex) when (attempt < maxRetries && (ex is HttpRequestException || ex is TaskCanceledException))
+        {
+            Console.WriteLine($"[Retry Warning] Transient exception ({ex.Message}). Retrying attempt {attempt}/{maxRetries} in {delay}ms...");
+        }
+
+        await Task.Delay(delay);
+        delay *= 2;
+    }
+
+    throw new InvalidOperationException("Unexpected state reached in retry policy.");
+}
+
+static async Task<string> GetStringWithRetryAsync(HttpClient client, string url)
+{
+    var response = await SendWithRetryAsync(() => client.GetAsync(url));
+    response.EnsureSuccessStatusCode();
+    return await response.Content.ReadAsStringAsync();
 }
