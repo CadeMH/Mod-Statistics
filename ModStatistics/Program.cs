@@ -14,8 +14,8 @@ using HttpClient client = new HttpClient();
 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Compatible; ModStats/1.0)");
 
 bool getThunderstore = true;
-bool getSteam = false;
-bool getNexus = false;
+bool getSteam = true;
+bool getNexus = true;
 
 Console.WriteLine("/// --- /// MOD STATISTICS /// --- ///");
 
@@ -66,33 +66,39 @@ try
                 {
                     var versionRegex = new Regex(@"(?<=-)([\d\.]+)(?=\.png)");
 
-                    var version = versionRegex.Match(item.GetProperty("icon_url").GetString() ?? "");
-                    string extractedVersion = version.Success ? version.Value : "1.0.0";
+                    string rawName = item.GetProperty("name").GetString() ?? "null";
+                    string iconUrl = item.GetProperty("icon_url").GetString() ?? "";
+                    var versionMatch = versionRegex.Match(iconUrl);
+                    string extractedVersion = versionMatch.Success ? versionMatch.Value : "1.0.0";
 
                     var ratings = item.GetProperty("rating_count").GetUInt64();
                     var downloads = item.GetProperty("download_count").GetUInt64();
 
-                    var identifier = $"{entry.Key}-{item.GetProperty("name").GetString()}";
+                    var identifier = $"{entry.Key}-{rawName}";
+                    var name = rawName.Replace("_", " ");
 
                     var mod = new Mod
                     {
-                        name = item.GetProperty("name").GetString()?.Replace("_", " ") ?? "null",
+                        name = name,
                         Downloads = downloads,
                         Ratings = ratings,
                         Version = extractedVersion,
                         community = community,
-                        link = $"https://thunderstore.io/c/{community}/p/{entry.Key}/{item.GetProperty("name").GetString() ?? "null"}",
+                        link = $"https://thunderstore.io/c/{community}/p/{entry.Key}/{rawName}",
                         platform = "Thunderstore",
                         popular = entry.Value.popular_identifiers.Contains(identifier) ? "True" : "False",
-                        icon = item.GetProperty("icon_url").GetString() ?? "null"
+                        icon = string.IsNullOrEmpty(iconUrl) ? "null" : iconUrl
                     };
 
                     totalDownloads += downloads;
                     totalRatings += ratings;
 
-                    Console.WriteLine($"[Thunderstore]: Processed {identifier} || Downloads: {mod.Downloads} || Ratings: {mod.Ratings} || Popular: {mod.popular}");
+                    string _name = name.PadRight(20);
+                    string _downloads = mod.Downloads.ToString().PadRight(8);
 
-                    packageData[item.GetProperty("name").GetString()!] = mod;
+                    Console.WriteLine($"[Thunderstore]: Processed {_name} || Downloads: {_downloads} || Ratings: {mod.Ratings}");
+
+                    packageData[rawName] = mod;
                 }
             }
         }
@@ -162,6 +168,9 @@ try
         }
     }
 
+    Console.WriteLine($"Total Downloads: {totalDownloads}");
+    Console.WriteLine($"Total Ratings: {totalRatings}");
+
     var finalData = new Dictionary<string, object>
     {
         { "total_downloads", totalDownloads },
@@ -188,9 +197,13 @@ try
         };
 
         var gistPayload = new { files = gistFiles };
-        using var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
 
-        var response = await SendWithRetryAsync(() => client.PatchAsync($"https://api.github.com/gists/{gistId}", patchContent));
+        var response = await SendWithRetryAsync(() =>
+        {
+            var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
+            return client.PatchAsync($"https://api.github.com/gists/{gistId}", patchContent);
+        });
+
         Console.WriteLine(response.IsSuccessStatusCode ? "Success! Gist Updated" : $"Error: Gist Failed: {response.StatusCode}");
     }
 }
