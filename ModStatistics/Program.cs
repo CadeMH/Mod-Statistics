@@ -183,10 +183,12 @@ try
 
             entry.Value.MemberCount = root.GetProperty("profile").GetProperty("member_count").GetUInt64();
             entry.Value.OnlineCount = root.GetProperty("profile").GetProperty("online_count").GetUInt64();
-            entry.Value.Description = root.GetProperty("profile").GetProperty("description").GetString() ?? "";
+            if (entry.Value.Description == "")
+                entry.Value.Description = root.GetProperty("profile").GetProperty("description").GetString() ?? "";
+
             string guildID = root.GetProperty("profile").GetProperty("id").GetString() ?? "";
             string iconHash = root.GetProperty("profile").GetProperty("icon_hash").GetString() ?? "";
-            
+
             entry.Value.Icon = $"https://cdn.discordapp.com/icons/{guildID}/{iconHash}.webp?size=256&quality=lossless";
 
             if(!entry.Value.Archive)
