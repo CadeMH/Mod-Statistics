@@ -8,12 +8,14 @@
             "among-us",
             "yapyap",
             "super-battle-golf",
-            "crashout-crew"
+            "crashout-crew",
+            "how-to-fish"
         ],
         "popular_identifiers": [
             "AtomicStudio-Better_Shotgun_Tooltip",
             "AtomicStudio-Atomics_Cosmetics",
-            "AtomicStudio-Leveling"
+            "AtomicStudio-Leveling",
+            "AtomicStudio-Stackable_Items"
         ]
     }
 }
