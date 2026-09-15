@@ -55,7 +55,7 @@ try
                 {
                     var responseBody = await response.Content.ReadAsStringAsync();
                     response.Dispose();
-                    throw new HttpRequestException(
+                    throw new InvalidOperationException(
                         $"{requestName} failed with status {(int)response.StatusCode} ({response.StatusCode})"
                         + (string.IsNullOrWhiteSpace(responseBody) ? "" : $": {responseBody}"));
                 }
@@ -298,8 +298,6 @@ try
         };
 
         var gistPayload = new { files = gistFiles };
-        var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
-
         using var result = await SendWithRetryAsync(() =>
         {
             var request = new HttpRequestMessage(HttpMethod.Patch, $"https://api.github.com/gists/{gistId}")
