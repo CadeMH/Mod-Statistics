@@ -34,6 +34,13 @@ try
         if (response.Headers.RetryAfter?.Delta is TimeSpan retryAfter)
             return retryAfter;
 
+        if (response.Headers.RetryAfter?.Date is DateTimeOffset retryAt)
+        {
+            var delay = retryAt - DateTimeOffset.UtcNow;
+            if (delay > TimeSpan.Zero)
+                return delay;
+        }
+
         return TimeSpan.FromSeconds(Math.Pow(2, attempt));
     }
 
