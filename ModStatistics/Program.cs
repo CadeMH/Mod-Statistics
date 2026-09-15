@@ -72,7 +72,13 @@ try
                 response.Dispose();
                 await Task.Delay(delay);
             }
-            catch (Exception ex) when (attempt < maxAttempts && (ex is HttpRequestException || ex is TaskCanceledException))
+            catch (HttpRequestException ex) when (attempt < maxAttempts)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                Console.WriteLine($"Retrying {requestName} after transient error: {ex.Message} ({delay.TotalSeconds:0.#} seconds)...");
+                await Task.Delay(delay);
+            }
+            catch (TaskCanceledException ex) when (attempt < maxAttempts && !ex.CancellationToken.IsCancellationRequested)
             {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
                 Console.WriteLine($"Retrying {requestName} after transient error: {ex.Message} ({delay.TotalSeconds:0.#} seconds)...");
