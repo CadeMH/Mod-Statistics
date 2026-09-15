@@ -82,7 +82,7 @@ try
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
                 await DelayBeforeRetryAsync(requestName, $"transient error: {ex.Message}", delay);
             }
-            catch (TaskCanceledException ex) when (attempt < maxAttempts && !ex.CancellationToken.IsCancellationRequested)
+            catch (TaskCanceledException ex) when (attempt < maxAttempts && ex.InnerException is TimeoutException)
             {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
                 await DelayBeforeRetryAsync(requestName, $"transient error: {ex.Message}", delay);
