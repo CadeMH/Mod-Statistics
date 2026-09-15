@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Headers;
+﻿using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -23,6 +24,64 @@ Console.WriteLine("/// --- /// MOD STATISTICS /// --- ///");
 
 try
 {
+    static bool IsTransientStatusCode(HttpStatusCode statusCode)
+        => statusCode == HttpStatusCode.RequestTimeout
+        || statusCode == HttpStatusCode.TooManyRequests
+        || (int)statusCode >= 500;
+
+    static TimeSpan GetRetryDelay(HttpResponseMessage response, int attempt)
+    {
+        if (response.Headers.RetryAfter?.Delta is TimeSpan retryAfter)
+            return retryAfter;
+
+        return TimeSpan.FromSeconds(Math.Pow(2, attempt));
+    }
+
+    async Task<HttpResponseMessage> SendWithRetryAsync(Func<HttpRequestMessage> requestFactory, string requestName)
+    {
+        const int maxAttempts = 4;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                using var request = requestFactory();
+                var response = await client.SendAsync(request);
+
+                if (response.IsSuccessStatusCode)
+                    return response;
+
+                if (attempt == maxAttempts || !IsTransientStatusCode(response.StatusCode))
+                {
+                    var responseBody = await response.Content.ReadAsStringAsync();
+                    response.Dispose();
+                    throw new HttpRequestException(
+                        $"{requestName} failed with status {(int)response.StatusCode} ({response.StatusCode})"
+                        + (string.IsNullOrWhiteSpace(responseBody) ? "" : $": {responseBody}"));
+                }
+
+                var delay = GetRetryDelay(response, attempt);
+                Console.WriteLine($"Retrying {requestName} after transient HTTP {(int)response.StatusCode} ({response.StatusCode}) in {delay.TotalSeconds:0.#} seconds...");
+                response.Dispose();
+                await Task.Delay(delay);
+            }
+            catch (Exception ex) when (attempt < maxAttempts && (ex is HttpRequestException || ex is TaskCanceledException))
+            {
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                Console.WriteLine($"Retrying {requestName} after transient error: {ex.Message} ({delay.TotalSeconds:0.#} seconds)...");
+                await Task.Delay(delay);
+            }
+        }
+
+        throw new InvalidOperationException($"Retry loop exited unexpectedly for {requestName}.");
+    }
+
+    async Task<string> GetStringWithRetryAsync(string url)
+    {
+        using var response = await SendWithRetryAsync(() => new HttpRequestMessage(HttpMethod.Get, url), $"GET {url}");
+        return await response.Content.ReadAsStringAsync();
+    }
+
     var thunderstoreTeams = Thunderstore.GetThunderstoreMods();
     var steamMods = SteamWorkshop.GetSteamWorkshop();
     var nexusMods = NexusMods.GetNexusMods();
@@ -42,7 +101,7 @@ try
         string url = initialUrl;
         while (url != null)
         {
-            var response = await client.GetStringAsync(url);
+            var response = await GetStringWithRetryAsync(url);
             using var doc = JsonDocument.Parse(response);
 
             foreach (var item in doc.RootElement.GetProperty("results").EnumerateArray())
@@ -63,8 +122,8 @@ try
                 //var response = await client.GetStringAsync(url);
                 //using var doc = JsonDocument.Parse(response);
 
-                using var response = await client.GetStreamAsync($"{baseURL}/community/{community}");
-                using var document = await JsonDocument.ParseAsync(response);
+                var communityResponse = await GetStringWithRetryAsync($"{baseURL}/community/{community}");
+                using var document = JsonDocument.Parse(communityResponse);
 
                 string communityName = document.RootElement.GetProperty("name").GetString();
 
@@ -117,7 +176,7 @@ try
 
         for (int i = 0; i < steamIds.Count; i++) steamUrl += $"&publishedfileids[{i}]={steamIds[i]}";
 
-        var response = await client.GetStringAsync(steamUrl);
+        var response = await GetStringWithRetryAsync(steamUrl);
         using var doc = JsonDocument.Parse(response);
         var items = doc.RootElement.GetProperty("response").GetProperty("publishedfiledetails");
 
@@ -154,7 +213,7 @@ try
         {
             Console.WriteLine(entry.Value.community, entry.Value.nexusModId);
             string url = $"https://api.nexusmods.com/v1/games/{entry.Value.community}/mods/{entry.Value.nexusModId}.json";
-            var response = await client.GetStringAsync(url);
+            var response = await GetStringWithRetryAsync(url);
             using var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
 
@@ -177,7 +236,7 @@ try
         {
             Console.WriteLine(entry.Value.Name);
             string url = $"https://discord.com/api/invites/{entry.Value.InviteLink}";
-            var response = await client.GetStringAsync(url);
+            var response = await GetStringWithRetryAsync(url);
             using var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
 
@@ -241,7 +300,15 @@ try
         var gistPayload = new { files = gistFiles };
         var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
 
-        var result = await client.PatchAsync($"https://api.github.com/gists/{gistId}", patchContent);
+        using var result = await SendWithRetryAsync(() =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Patch, $"https://api.github.com/gists/{gistId}")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json")
+            };
+
+            return request;
+        }, $"PATCH https://api.github.com/gists/{gistId}");
         Console.WriteLine(result.IsSuccessStatusCode ? "Success! Gist Updated" : $"Error: Gist Failed: {result.StatusCode}");
     }
 }
