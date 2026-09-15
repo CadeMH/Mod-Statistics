@@ -47,7 +47,7 @@ try
     static async Task DelayBeforeRetryAsync(string requestName, string reason, TimeSpan delay)
     {
         Console.WriteLine($"Retrying {requestName} after {reason} ({delay.TotalSeconds:0.#} seconds)...");
-        await Task.Delay(delay);
+        await Task.Delay(delay, CancellationToken.None);
     }
 
     async Task<HttpResponseMessage> SendWithRetryAsync(Func<HttpRequestMessage> requestFactory, string requestName)
@@ -59,7 +59,7 @@ try
             try
             {
                 using var request = requestFactory();
-                var response = await client.SendAsync(request);
+                var response = await client.SendAsync(request, CancellationToken.None);
 
                 if (response.IsSuccessStatusCode)
                     return response;
@@ -82,7 +82,7 @@ try
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
                 await DelayBeforeRetryAsync(requestName, $"transient error: {ex.Message}", delay);
             }
-            catch (TaskCanceledException ex) when (attempt < maxAttempts && ex.InnerException is TimeoutException)
+            catch (TaskCanceledException ex) when (attempt < maxAttempts)
             {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
                 await DelayBeforeRetryAsync(requestName, $"transient error: {ex.Message}", delay);
