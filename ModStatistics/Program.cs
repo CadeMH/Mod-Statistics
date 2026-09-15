@@ -44,6 +44,12 @@ try
         return TimeSpan.FromSeconds(Math.Pow(2, attempt));
     }
 
+    static async Task DelayBeforeRetryAsync(string requestName, string reason, TimeSpan delay)
+    {
+        Console.WriteLine($"Retrying {requestName} after {reason} ({delay.TotalSeconds:0.#} seconds)...");
+        await Task.Delay(delay);
+    }
+
     async Task<HttpResponseMessage> SendWithRetryAsync(Func<HttpRequestMessage> requestFactory, string requestName)
     {
         const int maxAttempts = 4;
@@ -68,21 +74,18 @@ try
                 }
 
                 var delay = GetRetryDelay(response, attempt);
-                Console.WriteLine($"Retrying {requestName} after transient HTTP {(int)response.StatusCode} ({response.StatusCode}) in {delay.TotalSeconds:0.#} seconds...");
                 response.Dispose();
-                await Task.Delay(delay);
+                await DelayBeforeRetryAsync(requestName, $"transient HTTP {(int)response.StatusCode} ({response.StatusCode})", delay);
             }
             catch (HttpRequestException ex) when (attempt < maxAttempts)
             {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                Console.WriteLine($"Retrying {requestName} after transient error: {ex.Message} ({delay.TotalSeconds:0.#} seconds)...");
-                await Task.Delay(delay);
+                await DelayBeforeRetryAsync(requestName, $"transient error: {ex.Message}", delay);
             }
             catch (TaskCanceledException ex) when (attempt < maxAttempts && !ex.CancellationToken.IsCancellationRequested)
             {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                Console.WriteLine($"Retrying {requestName} after transient error: {ex.Message} ({delay.TotalSeconds:0.#} seconds)...");
-                await Task.Delay(delay);
+                await DelayBeforeRetryAsync(requestName, $"transient error: {ex.Message}", delay);
             }
         }
 
