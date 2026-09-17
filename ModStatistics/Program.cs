@@ -60,7 +60,7 @@ try
             var baseURL = "https://thunderstore.io/api/cyberstorm/listing";
             foreach (var community in entry.Value.communities)
             {
-                var url = $"{baseURL}/{community}/{entry.Key}";
+                var url = $"{baseURL}/{community}/{entry.Key}/";
 
                 await foreach (var item in GetAllPages(url))
                 {
