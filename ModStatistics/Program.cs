@@ -39,16 +39,23 @@ try
 
     async IAsyncEnumerable<JsonElement> GetAllPages(string initialUrl)
     {
-        string url = initialUrl;
-        while (url != null)
+        string? url = initialUrl;
+        while (!string.IsNullOrEmpty(url))
         {
-            var response = await client.GetStringAsync(url);
+            var response = await GetStringWithRetryAsync(client, url);
             using var doc = JsonDocument.Parse(response);
 
-            foreach (var item in doc.RootElement.GetProperty("results").EnumerateArray())
-                yield return item.Clone();
+            if (doc.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in results.EnumerateArray())
+                {
+                    yield return item.Clone();
+                }
+            }
 
-            url = doc.RootElement.GetProperty("next").GetString();
+            url = doc.RootElement.TryGetProperty("next", out var next) && next.ValueKind == JsonValueKind.String
+                ? next.GetString()
+                : null;
         }
     }
 
@@ -56,31 +63,25 @@ try
     {
         foreach (var entry in thunderstoreTeams)
         {
-            var baseURL = "https://thunderstore.io/api/cyberstorm";
+            var baseURL = "https://thunderstore.io/api/cyberstorm/listing";
             foreach (var community in entry.Value.communities)
             {
-                var url = $"{baseURL}/listing/{community}/{entry.Key}";
-                //var response = await client.GetStringAsync(url);
-                //using var doc = JsonDocument.Parse(response);
+                var url = $"{baseURL}/{community}/{entry.Key}/";
 
-                using var response = await client.GetStreamAsync($"{baseURL}/community/{community}");
-                using var document = await JsonDocument.ParseAsync(response);
-
-                string communityName = document.RootElement.GetProperty("name").GetString();
-
-
-                await foreach(var item in GetAllPages(url))
+                await foreach (var item in GetAllPages(url))
                 {
                     var versionRegex = new Regex(@"(?<=-)([\d\.]+)(?=\.png)");
 
-                    var version = versionRegex.Match(item.GetProperty("icon_url").GetString() ?? "");
-                    string extractedVersion = version.Success ? version.Value : "1.0.0";
+                    string rawName = item.GetProperty("name").GetString() ?? "null";
+                    string iconUrl = item.GetProperty("icon_url").GetString() ?? "";
+                    var versionMatch = versionRegex.Match(iconUrl);
+                    string extractedVersion = versionMatch.Success ? versionMatch.Value : "1.0.0";
 
                     var ratings = item.GetProperty("rating_count").GetUInt64();
                     var downloads = item.GetProperty("download_count").GetUInt64();
 
-                    var identifier = $"{entry.Key}-{item.GetProperty("name").GetString()}";
-                    var name = item.GetProperty("name").GetString().Replace("_", " ") ?? "null";
+                    var identifier = $"{entry.Key}-{rawName}";
+                    var name = rawName.Replace("_", " ");
 
                     var mod = new Mod
                     {
@@ -89,11 +90,10 @@ try
                         Ratings = ratings,
                         Version = extractedVersion,
                         community = community,
-                        community_name = communityName,
-                        link = $"https://thunderstore.io/c/{community}/p/{entry.Key}/{item.GetProperty("name").GetString() ?? "null"}",
+                        link = $"https://thunderstore.io/c/{community}/p/{entry.Key}/{rawName}",
                         platform = "Thunderstore",
                         popular = entry.Value.popular_identifiers.Contains(identifier) ? "True" : "False",
-                        icon = item.GetProperty("icon_url").GetString() ?? "null"
+                        icon = string.IsNullOrEmpty(iconUrl) ? "null" : iconUrl
                     };
 
                     totalDownloads += downloads;
@@ -104,7 +104,7 @@ try
 
                     Console.WriteLine($"[Thunderstore]: Processed {_name} || Downloads: {_downloads} || Ratings: {mod.Ratings}");
 
-                    modData[item.GetProperty("name").GetString()] = mod;
+                    modData[rawName] = mod;
                 }
             }
         }
@@ -115,9 +115,12 @@ try
         var steamIds = steamMods.Keys.ToList();
         var steamUrl = "https://api.steampowered.com/IPublishedFileService/GetDetails/v1/?key=" + steamApiKey + "&includevotes=true";
 
-        for (int i = 0; i < steamIds.Count; i++) steamUrl += $"&publishedfileids[{i}]={steamIds[i]}";
+        for (int i = 0; i < steamIds.Count; i++)
+        {
+            steamUrl += $"&publishedfileids[{i}]={steamIds[i]}";
+        }
 
-        var response = await client.GetStringAsync(steamUrl);
+        var response = await GetStringWithRetryAsync(client, steamUrl);
         using var doc = JsonDocument.Parse(response);
         var items = doc.RootElement.GetProperty("response").GetProperty("publishedfiledetails");
 
@@ -146,15 +149,15 @@ try
 
     if (getNexus && !string.IsNullOrEmpty(nexusApiKey))
     {
-        client.DefaultRequestHeaders.Clear();
+        client.DefaultRequestHeaders.Remove("apikey");
         client.DefaultRequestHeaders.Add("apikey", nexusApiKey);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Compatible; ModStats/1.0)");
 
         foreach (var entry in nexusMods)
         {
-            Console.WriteLine(entry.Value.community, entry.Value.nexusModId);
+            Console.WriteLine($"{entry.Value.community} {entry.Value.nexusModId}");
             string url = $"https://api.nexusmods.com/v1/games/{entry.Value.community}/mods/{entry.Value.nexusModId}.json";
-            var response = await client.GetStringAsync(url);
+
+            var response = await GetStringWithRetryAsync(client, url);
             using var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
 
@@ -177,7 +180,7 @@ try
         {
             Console.WriteLine(entry.Value.Name);
             string url = $"https://discord.com/api/invites/{entry.Value.InviteLink}";
-            var response = await client.GetStringAsync(url);
+            var response = await GetStringWithRetryAsync(client, url);
             using var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
 
@@ -239,14 +242,65 @@ try
         };
 
         var gistPayload = new { files = gistFiles };
-        var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
 
-        var result = await client.PatchAsync($"https://api.github.com/gists/{gistId}", patchContent);
-        Console.WriteLine(result.IsSuccessStatusCode ? "Success! Gist Updated" : $"Error: Gist Failed: {result.StatusCode}");
+        var response = await SendWithRetryAsync(() =>
+        {
+            var patchContent = new StringContent(JsonSerializer.Serialize(gistPayload), Encoding.UTF8, "application/json");
+            return client.PatchAsync($"https://api.github.com/gists/{gistId}", patchContent);
+        });
+
+        Console.WriteLine(response.IsSuccessStatusCode ? "Success! Gist Updated" : $"Error: Gist Failed: {response.StatusCode}");
+    }
+    else
+    {
+        Console.WriteLine("Error: GITHUB_TOKEN is not set. Cannot update gist.");
+        Environment.Exit(2);
     }
 }
 catch (Exception ex)
 {
     Console.WriteLine($"Error: {ex.Message}");
     Environment.Exit(1);
+}
+
+static async Task<HttpResponseMessage> SendWithRetryAsync(
+    Func<Task<HttpResponseMessage>> requestFunc,
+    int maxRetries = 3,
+    int initialDelayMs = 1000)
+{
+    int delay = initialDelayMs;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++)
+    {
+        try
+        {
+            var response = await requestFunc();
+
+            int statusCode = (int)response.StatusCode;
+            bool isTransient = statusCode >= 500 || statusCode == 429;
+
+            if (response.IsSuccessStatusCode || !isTransient || attempt == maxRetries)
+            {
+                return response;
+            }
+
+            Console.WriteLine($"[Retry Warning] Status code {statusCode}. Retrying attempt {attempt}/{maxRetries} in {delay}ms...");
+        }
+        catch (Exception ex) when (attempt < maxRetries && (ex is HttpRequestException || ex is TaskCanceledException))
+        {
+            Console.WriteLine($"[Retry Warning] Transient exception ({ex.Message}). Retrying attempt {attempt}/{maxRetries} in {delay}ms...");
+        }
+
+        await Task.Delay(delay);
+        delay *= 2;
+    }
+
+    throw new InvalidOperationException("Unexpected state reached in retry policy.");
+}
+
+static async Task<string> GetStringWithRetryAsync(HttpClient client, string url)
+{
+    var response = await SendWithRetryAsync(() => client.GetAsync(url));
+    response.EnsureSuccessStatusCode();
+    return await response.Content.ReadAsStringAsync();
 }
