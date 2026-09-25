@@ -1,21 +1,20 @@
 {
-    "AtomicStudio": {
+    "CadeMH": {
         "communities": [
-            "lethal-company",
-            "content-warning",
-            "repo",
             "peak",
-            "among-us",
-            "yapyap",
+            "bopl-battle",
             "super-battle-golf",
             "crashout-crew",
             "how-to-fish"
-        ],
-        "popular_identifiers": [
-            "AtomicStudio-Better_Shotgun_Tooltip",
-            "AtomicStudio-Atomics_Cosmetics",
-            "AtomicStudio-Leveling",
-            "AtomicStudio-Stackable_Items"
+        ]
+    },
+    "CMax": {
+        "communities": [
+            "peak",
+            "bopl-battle",
+            "super-battle-golf",
+            "crashout-crew",
+            "how-to-fish"
         ]
     }
 }

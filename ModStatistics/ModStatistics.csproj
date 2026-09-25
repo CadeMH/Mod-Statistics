@@ -11,12 +11,14 @@
     <None Remove="nexusmods.json" />
     <None Remove="steam.json" />
     <None Remove="thunderstore.json" />
+    <None Remove="discord.json" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="nexusmods.json" />
     <EmbeddedResource Include="steam.json" />
     <EmbeddedResource Include="thunderstore.json" />
+    <EmbeddedResource Include="discord.json" />
   </ItemGroup>
 
   <ItemGroup>

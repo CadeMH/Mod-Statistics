@@ -12,6 +12,7 @@ namespace ModStatistics
         [JsonPropertyName("version")]
         public string Version { get; set; } = "1.0.0";
         public string community { get; set; } = "null";
+        public string community_name { get; set; } = "null";
         public string link { get; set; } = "null";
         public string platform { get; set; } = "null";
         public string popular { get; set; } = "False";
@@ -23,6 +24,29 @@ namespace ModStatistics
         public ulong NegativeRatings { get; set; }
 
         public string nexusModId { get; set; }
+    }
+
+        public class DiscordServer
+    {
+        public string Name { get; set; } = "";
+        public ulong MemberCount { get; set; } = 0;
+        public ulong OnlineCount { get; set; } = 0;
+        [JsonPropertyName("description")]
+        public string Description { get; set; } = "";
+        [JsonPropertyName("invite")]
+        public string InviteLink { get; set; } = "";
+        public string Link { get; set; } = "";
+        public string Platform { get; set; } = "";
+        [JsonPropertyName("role")]
+        public string Role { get; set; } = "";
+        public string Icon { get; set; } = "";
+        [JsonPropertyName("archive")]
+        public bool Archive { get; set; }
+    }
+
+        public class DiscordJSON
+    {
+        public Dictionary<string, DiscordServer> Content { get; set; } = new();
     }
 
     public class ThunderstoreJSONContent
