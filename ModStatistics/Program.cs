@@ -63,7 +63,7 @@ try
     {
         foreach (var entry in thunderstoreTeams)
         {
-            var baseURL = "https://thunderstore.io/api/cyberstorm";
+            var baseURL = "https://thunderstore.io/api/cyberstorm/listing";
             foreach (var community in entry.Value.communities)
             {
                 var url = $"{baseURL}/{community}/{entry.Key}/";
@@ -104,7 +104,7 @@ try
 
                     Console.WriteLine($"[Thunderstore]: Processed {_name} || Downloads: {_downloads} || Ratings: {mod.Ratings}");
 
-                    packageData[rawName] = mod;
+                    modData[rawName] = mod;
                 }
             }
         }
@@ -180,7 +180,7 @@ try
         {
             Console.WriteLine(entry.Value.Name);
             string url = $"https://discord.com/api/invites/{entry.Value.InviteLink}";
-            var response = await client.GetStringAsync(url);
+            var response = await GetStringWithRetryAsync(client, url);
             using var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
 
@@ -250,6 +250,11 @@ try
         });
 
         Console.WriteLine(response.IsSuccessStatusCode ? "Success! Gist Updated" : $"Error: Gist Failed: {response.StatusCode}");
+    }
+    else
+    {
+        Console.WriteLine("Error: GITHUB_TOKEN is not set. Cannot update gist.");
+        Environment.Exit(2);
     }
 }
 catch (Exception ex)

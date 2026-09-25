@@ -3,5 +3,7 @@ ModStatistics/obj
 ModStatistics/bin
 
 .vs
-
 .vscode/
+.idea/
+
+*.user
