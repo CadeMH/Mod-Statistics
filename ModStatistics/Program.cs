@@ -90,6 +90,10 @@ try
                         Ratings = ratings,
                         Version = extractedVersion,
                         community = community,
+                        community_name = item.TryGetProperty("community_name", out var communityName)
+                                         && communityName.ValueKind == JsonValueKind.String
+                            ? communityName.GetString() ?? community
+                            : community,
                         link = $"https://thunderstore.io/c/{community}/p/{entry.Key}/{rawName}",
                         platform = "Thunderstore",
                         popular = entry.Value.popular_identifiers.Contains(identifier) ? "True" : "False",
